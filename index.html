@@ -17,6 +17,7 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            height: 100dvh; /* Dynamic viewport height to prevent mobile browser gap issues */
             overflow: hidden;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             touch-action: none;
@@ -26,8 +27,7 @@
             width: 100%;
             max-width: 400px;
             height: 100%;
-            max-height: 700px;
-            background: linear-gradient(to bottom, #e0f7fa, #b2ebf2); /* Softer sky color */
+            background: linear-gradient(to bottom, #e0f7fa, #b2ebf2);
             overflow: hidden;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
@@ -46,7 +46,7 @@
             padding: 0 20px;
             font-size: 20px;
             font-weight: bold;
-            color: #e0818c; /* Matched to the start button color */
+            color: #e0818c;
             pointer-events: none;
             z-index: 10;
         }
@@ -64,13 +64,13 @@
             z-index: 20;
         }
         #logo {
-            width: 85%; /* Responsive size */
+            width: 85%;
             max-width: 320px;
             height: auto;
             margin-bottom: 40px;
         }
         .menu-btn {
-            background: #e0818c; /* Matched to the logo's pink color */
+            background: #e0818c;
             border: none;
             color: white;
             padding: 15px 40px;
@@ -97,7 +97,7 @@
             align-items: center;
             color: white;
             z-index: 20;
-            display: none; /* Hidden by default */
+            display: none;
         }
         #game-over-screen h1 {
             font-size: 40px;
@@ -154,17 +154,15 @@
         let spawnInterval = 65; 
 
         const basket = {
-            width: 105, // Slightly wider basket for better playability
+            width: 105,
             height: 45,
             x: 0, 
-            y: 0, 
+            y: 0, // Calculated dynamically in resizeCanvas to sit safely above mobile navigation bars
             speed: 14
         };
 
         let keys = { ArrowLeft: false, ArrowRight: false };
         let isDragging = false;
-
-        const petalPaths = [];
 
         function createPetalPath(scale = 1) {
             const p = new Path2D();
@@ -182,7 +180,9 @@
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
             basket.x = canvas.width / 2 - basket.width / 2;
-            basket.y = canvas.height - 90;
+            
+            // Moved the basket higher up (130 pixels from the bottom) to clear mobile browser toolbars/buttons
+            basket.y = canvas.height - 130;
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
@@ -230,7 +230,6 @@
                 this.height = 30 * this.scale;
                 this.radius = 15 * this.scale; 
 
-                // Constrain spawn range so extreme left/right impossible spawns don't happen
                 const margin = 30;
                 const maxSpawnX = canvas.width - this.width - margin;
                 this.x = Math.random() * (maxSpawnX - margin) + margin;
@@ -267,6 +266,7 @@
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('ui').style.display = 'flex';
             canvas.style.display = 'block';
+            resizeCanvas(); // Ensure positions align correctly upon starting
             resetGameVars();
             isPlaying = true;
             loop();
@@ -340,7 +340,8 @@
                     continue;
                 }
 
-                if (p.y > canvas.height) {
+                // Petals now count as missed once they pass below the basket line
+                if (p.y > basket.y + basket.height) {
                     missed++;
                     document.getElementById('missed-display').innerText = `Missed: ${missed}/${maxMisses}`;
                     petals.splice(i, 1);

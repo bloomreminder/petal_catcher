@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Petal Catcher</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            height: 100%;
+            max-height: 700px;
+            background: linear-gradient(to bottom, #e0f7fa, #b2ebf2); /* Softer sky color */
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #e0818c; /* Matched to the start button color */
+            pointer-events: none;
+            z-index: 10;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #e0f7fa, #b2ebf2);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        #logo {
+            width: 85%; /* Responsive size */
+            max-width: 320px;
+            height: auto;
+            margin-bottom: 40px;
+        }
+        .menu-btn {
+            background: #e0818c; /* Matched to the logo's pink color */
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            font-size: 22px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s, background 0.2s;
+        }
+        .menu-btn:active {
+            transform: scale(0.95);
+            background: #c86d77;
+        }
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 20;
+            display: none; /* Hidden by default */
+        }
+        #game-over-screen h1 {
+            font-size: 40px;
+            margin-bottom: 10px;
+            color: #e0818c;
+        }
+        #game-over-screen p {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        #best-score-display {
+            font-size: 18px;
+            color: #ffb3c6;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Start Screen -->
+        <div id="start-screen">
+            <img id="logo" src="petal_catcher_logo.png" alt="Petal Catcher Logo">
+            <button class="menu-btn" onclick="startGame()">START</button>
+        </div>
+
+        <!-- In-Game UI (Hidden initially) -->
+        <div id="ui" style="display: none;">
+            <div id="score-display">Score: 0</div>
+            <div id="missed-display">Missed: 0/3</div>
+        </div>
+        <canvas id="gameCanvas" style="display: none;"></canvas>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen">
+            <h1>Game Over</h1>
+            <p id="final-score">Your Score: 0</p>
+            <p id="best-score-display">BEST: 0</p>
+            <button class="menu-btn" onclick="resetGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let score = 0;
+        let bestScore = 0;
+        let missed = 0;
+        const maxMisses = 3;
+        let isPlaying = false;
+        let petals = [];
+        let spawnTimer = 0;
+        let spawnInterval = 65; 
+
+        const basket = {
+            width: 105, // Slightly wider basket for better playability
+            height: 45,
+            x: 0, 
+            y: 0, 
+            speed: 14
+        };
+
+        let keys = { ArrowLeft: false, ArrowRight: false };
+        let isDragging = false;
+
+        const petalPaths = [];
+
+        function createPetalPath(scale = 1) {
+            const p = new Path2D();
+            const shapes = [
+                () => { p.moveTo(0,0); p.bezierCurveTo(5,-10, 15,-10, 20,0); p.bezierCurveTo(25,10, 10,20, 0,0); },
+                () => { p.moveTo(0,0); p.bezierCurveTo(-5,-15, 25,-15, 20,0); p.bezierCurveTo(15,15, -10,15, 0,0); },
+                () => { p.moveTo(0,0); p.bezierCurveTo(10,-20, 30,0, 20,10); p.bezierCurveTo(10,15, 0,0, 0,0); }
+            ];
+            shapes[Math.floor(Math.random() * shapes.length)]();
+            return p;
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            basket.x = canvas.width / 2 - basket.width / 2;
+            basket.y = canvas.height - 90;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        window.addEventListener('keydown', (e) => {
+            if (!isPlaying) return;
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.ArrowLeft = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.ArrowRight = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.ArrowLeft = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.ArrowRight = false;
+        });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (!isPlaying) return;
+            isDragging = true;
+            updateBasketPosition(e);
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!isPlaying || !isDragging) return;
+            updateBasketPosition(e);
+        });
+
+        window.addEventListener('pointerup', () => {
+            isDragging = false;
+        });
+
+        function updateBasketPosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            const touchX = e.clientX - rect.left;
+            basket.x = touchX - basket.width / 2;
+            if (basket.x < 0) basket.x = 0;
+            if (basket.x > canvas.width - basket.width) basket.x = canvas.width - basket.width;
+        }
+
+        class Petal {
+            constructor() {
+                this.scale = 1.5; 
+                this.path = createPetalPath();
+                
+                this.width = 30 * this.scale;
+                this.height = 30 * this.scale;
+                this.radius = 15 * this.scale; 
+
+                // Constrain spawn range so extreme left/right impossible spawns don't happen
+                const margin = 30;
+                const maxSpawnX = canvas.width - this.width - margin;
+                this.x = Math.random() * (maxSpawnX - margin) + margin;
+                
+                this.y = -this.height;
+                
+                this.speed = Math.random() < 0.3 ? (Math.random() * 1.5 + 3.2) : (Math.random() * 1.0 + 1.8); 
+                
+                this.color = ['#e0818c', '#ff94a3', '#ff6b81', '#d1a1ff', '#ffb3c6'][Math.floor(Math.random() * 5)];
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.03;
+            }
+
+            update() {
+                this.y += this.speed;
+                this.rotation += this.rotSpeed;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.scale(this.scale, this.scale);
+                ctx.fillStyle = this.color;
+                ctx.fill(this.path);
+                ctx.lineWidth = 0.8;
+                ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+                ctx.stroke(this.path);
+                ctx.restore();
+            }
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('ui').style.display = 'flex';
+            canvas.style.display = 'block';
+            resetGameVars();
+            isPlaying = true;
+            loop();
+        }
+
+        function resetGameVars() {
+            score = 0;
+            missed = 0;
+            petals = [];
+            spawnTimer = 0;
+            spawnInterval = 65;
+            document.getElementById('missed-display').innerText = `Missed: ${missed}/${maxMisses}`;
+            document.getElementById('score-display').innerText = `Score: ${score}`;
+        }
+
+        function resetGame() {
+            document.getElementById('game-over-screen').style.display = 'none';
+            startGame();
+        }
+
+        function triggerGameOver() {
+            isPlaying = false;
+            
+            if (score > bestScore) {
+                bestScore = score;
+            }
+
+            document.getElementById('final-score').innerText = `Your Score: ${score}`;
+            document.getElementById('best-score-display').innerText = `BEST: ${bestScore}`;
+            document.getElementById('game-over-screen').style.display = 'flex';
+        }
+
+        function loop() {
+            if (!isPlaying) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (keys.ArrowLeft) basket.x -= basket.speed;
+            if (keys.ArrowRight) basket.x += basket.speed;
+            if (basket.x < 0) basket.x = 0;
+            if (basket.x > canvas.width - basket.width) basket.x = canvas.width - basket.width;
+
+            ctx.fillStyle = '#8B4513';
+            ctx.beginPath();
+            ctx.roundRect(basket.x, basket.y, basket.width, basket.height, [0, 0, 15, 15]);
+            ctx.fill();
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(basket.x - 4, basket.y, basket.width + 8, 8);
+
+            spawnTimer++;
+            if (spawnTimer >= spawnInterval) {
+                petals.push(new Petal());
+                spawnTimer = 0;
+                if (spawnInterval > 38) spawnInterval -= 0.5; 
+            }
+
+            for (let i = petals.length - 1; i >= 0; i--) {
+                let p = petals[i];
+                p.update();
+                p.draw();
+
+                if (
+                    p.y + p.height > basket.y && 
+                    p.y < basket.y + basket.height && 
+                    p.x + p.width > basket.x && 
+                    p.x < basket.x + basket.width 
+                ) {
+                    score += 5;
+                    document.getElementById('score-display').innerText = `Score: ${score}`;
+                    petals.splice(i, 1);
+                    continue;
+                }
+
+                if (p.y > canvas.height) {
+                    missed++;
+                    document.getElementById('missed-display').innerText = `Missed: ${missed}/${maxMisses}`;
+                    petals.splice(i, 1);
+
+                    if (missed >= maxMisses) {
+                        triggerGameOver();
+                        return;
+                    }
+                }
+            }
+            requestAnimationFrame(loop);
+        }
+
+    </script>
+</body>
+</html>
